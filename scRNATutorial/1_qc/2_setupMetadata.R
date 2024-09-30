@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 # -*-coding: utf-8 -*-
 #-----------------------------------------------
-# Title: Quality control of merged seurat object
+# Title: Setup metadata for quality control
 # Author: Amanda Zacharias
 # Date: 2024-09-23
 # Email: 16amz1@queensu.ca
@@ -17,12 +17,14 @@
 
 # Packages -----------------------------------------------
 library(Seurat) # 5.1.0
+library(dplyr) # 1.1.4
 
 # Source -----------------------------------------------
 
 # Pathways -----------------------------------------------
+projDir <- file.path("scRNATutorial")
 # Input ===========
-rDataDir <- file.path("1_qc", "rDataDir")
+rDataDir <- file.path(projDir, "1_qc", "rDataDir")
 
 # Output ===========
 
@@ -36,5 +38,34 @@ mergedSeurat$log10GenesPerUMI <- log10(mergedSeurat$nFeature_RNA) / log10(merged
 
 # Mitochondrial ratio ===========
 # Percentage of cell reads originating from mitochondrial genes
+#   Get the percentage of genes that match the regex pattern for genes starting with "MT-"
+# The Seurat::PercentageFeatureSet() function doesn't work if you're using gene names etc.
+#   Link to calculate from scratch: https://github.com/hbctraining/scRNA-seq/blob/master/lessons/mitoRatio.md
 mergedSeurat$mitoRatio <- Seurat::PercentageFeatureSet(object = mergedSeurat, pattern = "^MT-")
-# Get the percentage of genes that match the regex pattern for genes starting with "MT-"
+# Convert to ratio by dividing by 100
+mergedSeurat$mitoRatio <- mergedSeurat@meta.data$mitoRatio / 100
+
+# Additional metadata as separate object -----------------------------------------------
+metadata <- mergedSeurat@meta.data
+
+# Add cell IDs to metadata ===========
+metadata$cells <- rownames(metadata)
+
+# Add sample column indicating ctrl vs stm ===========
+# Remove all character after the first underscore, including the underscore
+metadata$sample <- sub("_.+", "", metadata$cells)
+
+# Rename columns ===========
+metadata <- metadata %>%
+  dplyr::rename(
+    seqFolder = orig.ident,
+    nUMI = nCount_RNA,
+    nGene = nFeature_RNA
+  )
+
+# Add back to Seurat metadata ===========
+mergedSeurat@meta.data <- metadata
+
+# Save -----------------------------------------------
+saveRDS(mergedSeurat, file = file.path(rDataDir, "mergedSeuratQcMetrics.rds"))
+saveRDS(metadata, file = file.path(rDataDir, "metadata.rds"))

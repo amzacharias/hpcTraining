@@ -18,13 +18,14 @@ library(Seurat) # 5.1.0
 # Source -----------------------------------------------
 
 # Pathways -----------------------------------------------
+projDir <- file.path("scRNATutorial")
 # Input ===========
-dataDir <- file.path("0_data")
-sampleDataDirs <- list.files(dataDir, full.names = TRUE,pattern = "matrix")
+dataDir <- file.path(projDir, "0_data")
+sampleDataDirs <- list.files(dataDir, full.names = TRUE, pattern = "matrix")
 names(sampleDataDirs) <- sub("(.+?)(\\_.*)", "\\1", basename(sampleDataDirs))
 
 # Output ===========
-rDataDir <- file.path("1_qc", "rDataDir")
+rDataDir <- file.path(projDir, "1_qc", "rDataDir")
 dir.create(rDataDir, showWarnings = FALSE)
 
 # Load data -----------------------------------------------
