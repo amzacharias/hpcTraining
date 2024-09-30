@@ -92,7 +92,7 @@ ggsave(
 # Genes per Cell ===========
 # Similar pattern expected for gene counts per cell
 # Expect a **single large peak of encapsulated cells**.
-# A small peak to left or bimodal peak could mean...
+# A small peak to right or bimodal peak could mean...
 #   1) set of cells failed
 #   2) biologically dif cells, e.g., inactive or less complex cells
 #   3) cells are smaller
