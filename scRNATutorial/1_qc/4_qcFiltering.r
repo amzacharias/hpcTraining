@@ -55,12 +55,12 @@ keepGenes <- Matrix::rowSums(nonZero) >= 10
 # Subset
 filteredCounts <- counts[keepGenes, ]
 
-cat("\nNumber of cells before filtering:", ncol(counts),
-    "\nNumber of cells after filtering:", ncol(filteredCounts),
-    "\nNumber of cells removed:", ncol(counts) - ncol(filteredCounts))
-# Number of cells before filtering: 29682
-# Number of cells after filtering: 29682
-# Number of cells removed: 0
+cat("\nNumber of genes before filtering:", nrow(counts),
+    "\nNumber of genes after filtering:", nrow(filteredCounts),
+    "\nNumber of genes removed:", nrow(counts) - nrow(filteredCounts))
+# Number of genes before filtering: 33538
+# Number of genes after filtering: 14244
+# Number of genes removed: 19294
 
 # New Seurat object for downstream analyses -----------------------------------------------
 filteredSeurat <- CreateSeuratObject(filteredCounts, meta.data = filteredSeurat@meta.data)
