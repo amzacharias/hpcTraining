@@ -232,4 +232,5 @@ splitSeurat$stim@assays
 # They appear to be the same
 
 # Save -----------------------------------------------
+saveRDS(seuratPhase, file = file.path(rDataDir, "seuratPhase.rds"))
 saveRDS(splitSeurat, file = file.path(rDataDir, "splitSeurat.rds"))
