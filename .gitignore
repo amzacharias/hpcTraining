@@ -52,4 +52,4 @@ rsconnect/
 scRNATutorial/0_data/*/*.gz
 scRNATutorial/0_data/cycle.rda
 scRNATutorial/0_data/*/*bz2
-scRNATutorial/1_qc/rDataDir/*
+scRNATutorial/*/rDataDir/*
