@@ -1,0 +1,211 @@
+#!/usr/bin/env Rscript
+# -*-coding: utf-8 -*-
+#-----------------------------------------------
+# Title: Cluster cells
+# Author: Amanda Zacharias
+# Date: 2024-10-18
+# Email: 16amz1@queensu.ca
+#-----------------------------------------------
+# Notes -----------------------------------------------
+# module load StdEnv/2023 r/4.4.0
+# https://github.com/hbctraining/scRNA-seq_online/blob/master/lessons/07_SC_clustering_cells_SCT.md
+# Goals:
+#   Generate cell type-specific clusters, using known marker genes to determine identify
+#   Determine whether clusters are *true* cell types, or due to biological/technical variation.
+# Challenges:
+#   Identify poor quality clusters, identify cell types, being patient during many iterations.
+# Recommendations:
+#   Known what cell types to expect
+#   May want to perform integration across conditions
+#   Regress out number of UMIs, mt content, and cell cycle if needed.
+#   Identify junk clusters for removal or re-visit QC.
+#     "junk" may be high mt content, low UMIs/genes
+#   If different cell types aren't nicely separated, try changing resolution / number PCs
+
+# Options -----------------------------------------------
+
+# Packages -----------------------------------------------
+library(Seurat) # 5.1.0
+library(ggplot2) # 3.5.1
+library(dplyr) # 1.1.4
+
+# Source -----------------------------------------------
+
+# Pathways -----------------------------------------------
+projDir <- file.path("scRNATutorial")
+## Input ===========
+inRDataDir <- file.path(projDir, "3_integrate", "rDataDir")
+
+## Output ===========
+rDataDir <- file.path(projDir, "4_cluster", "rDataDir")
+plotsDir <- file.path(projDir, "4_cluster", "plots")
+dir.create(rDataDir, showWarnings = FALSE)
+dir.create(plotsDir, showWarnings = FALSE)
+
+# Load data -----------------------------------------------
+seuratIntegrated <- readRDS(file.path(inRDataDir, "seuratIntegrated.rds"))
+
+# Identify significant PCs -----------------------------------------------
+# How many PCs necessary to capture majority of variation across cells?
+## Heatmap of genes and cells ordered by PCA scores ===========
+sigPcHeatmap <- DimHeatmap(
+  seuratIntegrated,
+  dims = 1:9,
+  cells = 500,
+  balanced = TRUE, # plot equal number of + and 0 genes
+  fast = FALSE, # use ggplot2
+  combine = TRUE
+)
+ggsave(
+  plot = sigPcHeatmap,
+  filename = "sigPcHeatmap.pdf", path = plotsDir,
+  width = 300, height = 300, units = "mm"
+)
+
+## Print top 10+ positive/negative genes by PCA scores, driving the PCs ===========
+print(
+  x = seuratIntegrated[["pca"]],
+  dims = 1:10,
+  nfeatures = 5
+)
+# PC_ 1
+# Positive:  FTL, TIMP1, FTH1, C15orf48, CXCL8
+# Negative:  RPL3, RPL13, RPS6, RPS18, RPL10
+# PC_ 2
+# Positive:  IGHM, CD74, IGKC, HLA-DRA, CD79A
+# Negative:  GNLY, CCL5, NKG7, GZMB, FGFBP2
+# PC_ 3
+# Positive:  CD74, HLA-DRA, IGHM, IGKC, HLA-DRB1
+# Negative:  S100A8, TRAC, PABPC1, FTL, CD3D
+# PC_ 4
+# Positive:  HSPB1, CACYBP, HSPH1, HSPA8, HSP90AB1
+# Negative:  CD74, IGHM, CCL5, GNLY, IGKC
+# PC_ 5
+# Positive:  FCGR3A, VMO1, TIMP1, MS4A7, TNFSF10
+# Negative:  CXCL8, CCL2, FTL, S100A8, S100A9
+# PC_ 6
+# Positive:  HLA-DQA1, HLA-DRA, HLA-DPA1, HLA-DRB1, TXN
+# Negative:  IGHM, IGKC, CD79A, S100A8, MS4A1
+# PC_ 7
+# Positive:  TIMP1, LYZ, S100A8, MARCKSL1, S100A9
+# Negative:  CCL2, CTSL, FTL, LGALS3, CSTB
+# PC_ 8
+# Positive:  LGALS3, FTL, S100A4, CD9, S100A6
+# Negative:  CXCL8, CCL3, CCL4, IL1B, SOD2
+# PC_ 9
+# Positive:  HSPB1, HSPA1A, GNLY, CD74, CXCL8
+# Negative:  MIR155HG, NME1, DUSP4, DUSP2, FTH1
+# PC_ 10
+# Positive:  S100A8, GNLY, S100A9, MYC, TIMP1
+# Negative:  CREM, CCL2, FTH1, CXCR4, ANXA1
+
+## Elbow plot ===========
+# Visualize standard deviation of each PC. Where does SD plateau?
+elbowPlot <- ElbowPlot(object = seuratIntegrated, ndims = 40)
+ggsave(
+  plot = elbowPlot,
+  filename = "elbowPlot.pdf", path = plotsDir,
+  width = 90, height = 90, units = "mm"
+)
+# Quantitatively evaluate: https://github.com/hbctraining/scRNA-seq_online/blob/master/lessons/elbow_plot_metric.md
+# Elbow is approx PCs 8-10 and platue is approx PC30.
+
+# Note: These methods were popular in the past for normalization &
+#   identitication of variable genes, but SCTransform is superior at
+#   estimating variance and not including technical variation in higher PCs.
+# With SCTransform, as number of PCs increases, variation explained increases.
+# However, compute power increases, so we'll just do the first 40 PCs for tutorial.
+
+# Clustering -----------------------------------------------
+# Seurat uses KNN graph w/ euclidian distance, then partitions into communities.
+# Description: https://biocellgen-public.svi.edu.au/mig_2019_scrnaseq-workshop/clustering-and-cell-annotation.html
+## Find neighbors ===========
+# edges = between cells w/ similar features
+# edge weights = shared overlap in local neighborhood
+seuratIntegrated <- FindNeighbors(object = seuratIntegrated, dims = 1:40)
+
+## Find clusters ===========
+# Graph-based clustering. Resolution = granulatiry of clustering, needs optimization!
+# For datasets with 3,000 - 5,000 cells, resolution between 0.4 and 1.4 is generally good.
+# Increased resolution --> increased number of clusters. Larger datasets --> larger resolution typically.
+seuratIntegrated <- FindClusters(
+  object = seuratIntegrated,
+  resolution = seq(0.4, 1.4, by = 0.4)
+)
+# Example message for one resolution param:
+# Number of nodes: 29682
+# Number of edges: 1061644
+
+# Running Louvain algorithm...
+# 0%   10   20   30   40   50   60   70   80   90   100%
+# [----|----|----|----|----|----|----|----|----|----|
+# **************************************************|
+# Maximum modularity in 10 random starts: 0.8511
+# Number of communities: 24
+# Elapsed time: 4 seconds
+
+# Visualize -----------------------------------------------
+# t-SNE and UMAP are most popular.
+# Suggest using the same number of PCs for plotting as number used for clustering.
+## Explore resolutions ===========
+seuratIntegrated@meta.data %>% View()
+# There's a column for each resolution. E.g., `integrated_snn_res.0.4`
+
+# Try 0.8 resolution ===========
+# 0.8 is in the middle, so we start there
+# Assign identify of clusters
+Idents(object = seuratIntegrated) <- "integrated_snn_res.0.8"
+
+## Plotting UMAP
+umapPlot8 <- DimPlot(
+  seuratIntegrated,
+  reduction = "umap",
+  label = TRUE,
+  label.size = 6
+)
+ggsave(
+  plot = umapPlot8,
+  filename = "umapPlot_res0.8.pdf", path = plotsDir,
+  width = 180, height = 180, units = "mm"
+)
+
+## Try 0.4 resolution ===========
+Idents(object = seuratIntegrated) <- "integrated_snn_res.0.4"
+umapPlot4 <- DimPlot(
+  seuratIntegrated,
+  reduction = "umap",
+  label = TRUE,
+  label.size = 6
+)
+ggsave(
+  plot = umapPlot4,
+  filename = "umapPlot_res0.4.pdf", path = plotsDir,
+  width = 180, height = 180, units = "mm"
+)
+# Fewer number of clusters than 0.8
+
+# Clusters look different from the tutorial, most likely b.c. of different
+# versions of Seurat dependencies.
+# Use provided integrated seurat instead.
+
+## Provided seurat object ===========
+load(bzfile(file.path(projDir, "0_data", "additional_data", "seurat_integrated.RData.bz2")))
+seuratIntegratedHbc <- seurat_integrated # rename
+rm(seurat_integrated) # rm old variable
+
+## Clustering with provided object ===========
+Idents(object = seuratIntegratedHbc) <- "integrated_snn_res.0.8"
+umapPlot8Hbc <- DimPlot(
+  seuratIntegratedHbc,
+  reduction = "umap",
+  label = TRUE,
+  label.size = 6
+)
+ggsave(
+  plot = umapPlot8Hbc,
+  filename = "umapPlot_res0.8_hbc.pdf", path = plotsDir,
+  width = 180, height = 180, units = "mm"
+)
+
+# Save -----------------------------------------------
+saveRDS(seuratIntegratedHbc, file = file.path(rDataDir, "seuratIntegratedHbc.rds"))

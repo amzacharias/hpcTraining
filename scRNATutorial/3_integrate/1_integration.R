@@ -28,7 +28,6 @@ library(ggplot2) # 3.5.1
 # Pathways -----------------------------------------------
 projDir <- file.path("scRNATutorial")
 ## Input ===========
-cycleDataPath <- file.path(projDir, "0_data", "cycle.rda")
 inRDataDir <- file.path(projDir, "2_normalize", "rDataDir")
 
 ## Output ===========
